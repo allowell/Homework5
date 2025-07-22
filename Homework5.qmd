@@ -42,8 +42,40 @@ new_heart <- heart_data |>
 
 ## Task 3: EDA
 ```{r}
-ggplot(new_heart, aes(x = MaxHR, y = Age, colour = HeartDisease_bin)) +
+ggplot(new_heart, aes(x = MaxHR, y = Age, color = HeartDisease_bin)) +
   geom_point()
 ```
 
+
+## Task 4: Testing and Training
+```{r}
+set.seed(101)
+library(rsample)
+
+heart_split <- initial_split(new_heart, prop = 0.8)
+train <- training(heart_split)
+test <- testing(heart_split)
+```
+
+
+## Task 5: OLS and LASSO
+
+### Fitting Interaction Model
+```{r}
+#Interaction Model
+ols_mlr <- lm(Age ~ MaxHR*HeartDisease_bin, data = train)
+#Summary
+summary(ols_mlr)
+
+#RMSE of test data
+
+```
+
+LASSO
+```{r}
+LASSO_recipe <- recipe(Age ~ MaxHR + HeartDisease_bin, data = new_heart) |>
+  step_normalize(all_predictors()) |>
+  step_interact( ~ MaxHR:starts_with("HeartDisease_bin_"))
+LASSO_recipe
+```
 
