@@ -1,0 +1,49 @@
+---
+title: "Homework 5 - Programming in Base R"
+format: pdf
+editor: visual
+---
+
+## Task 1: Conceptual Questions
+
+-   What is the purpose of using cross-validation when fitting a random forest model?
+-   Describe the bagged tree algorithm.
+-   What is meant by a general linear model?
+-   When fitting a multiple linear regression model, what does adding an interaction term
+    do? That is, what does it allow the model to do differently as compared to when it is
+    not included in the model?
+-   Why do we split our data into a training and test set?
+
+
+## Task 2: Data Prep
+
+### Packages and Data
+```{r, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(caret)
+library(tidymodels)
+library(yardstick)
+
+heart_data <- as_tibble(read_csv("heart.csv"))
+```
+
+```{r}
+summary(heart_data)
+```
+Heart Disease is a numeric variable in R, as we can see from the above summary. However, this is a binary variable, so this is incorrect. It needs to be a categorical variable.
+
+```{r}
+new_heart <- heart_data |>
+  mutate(HeartDisease_bin = factor(HeartDisease, levels = c(0,1))) |>
+  select(-c(ST_Slope, HeartDisease))
+```
+
+
+
+## Task 3: EDA
+```{r}
+ggplot(new_heart, aes(x = MaxHR, y = Age, colour = HeartDisease_bin)) +
+  geom_point()
+```
+
+
