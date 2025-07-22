@@ -9,15 +9,13 @@ editor: visual
 -   What is the purpose of using cross-validation when fitting a random forest model?
 -   Describe the bagged tree algorithm.
 -   What is meant by a general linear model?
--   When fitting a multiple linear regression model, what does adding an interaction term
-    do? That is, what does it allow the model to do differently as compared to when it is
-    not included in the model?
+-   When fitting a multiple linear regression model, what does adding an interaction term do? That is, what does it allow the model to do differently as compared to when it is not included in the model?
 -   Why do we split our data into a training and test set?
-
 
 ## Task 2: Data Prep
 
 ### Packages and Data
+
 ```{r, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(caret)
@@ -25,29 +23,36 @@ library(tidymodels)
 library(yardstick)
 
 heart_data <- as_tibble(read_csv("heart.csv"))
-```
-
-```{r}
 summary(heart_data)
 ```
 Heart Disease is a numeric variable in R, as we can see from the above summary. However, this is a binary variable, so this is incorrect. It needs to be a categorical variable.
 
+Now, creating the new data
 ```{r}
 new_heart <- heart_data |>
   mutate(HeartDisease_bin = factor(HeartDisease, levels = c(0,1))) |>
   select(-c(ST_Slope, HeartDisease))
 ```
 
-
-
 ## Task 3: EDA
+
+EDA Plot
 ```{r}
 ggplot(new_heart, aes(x = MaxHR, y = Age, color = HeartDisease_bin)) +
-  geom_point()
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(title = "Age by Maximum Heart Rate and Heart Disease Binary Predictor",
+       x = "Max Heart Rate",
+       y = "Age",
+       color = "Heart Disease") +
+  #Found colors using color brewer colorblind friendly palette
+  scale_colour_manual(values = c("#7570b3", "#d95f02"), labels = c("No", "Yes"))
 ```
-
+Based on the visual evidence, it looks like an interaction model is more appropriate because there are visible differences between the slope and intercept of the linear regression lines for Heart Disease = No versus Heart Disease = Yes.
 
 ## Task 4: Testing and Training
+
+Splitting data into training and testing
 ```{r}
 set.seed(101)
 library(rsample)
@@ -57,25 +62,87 @@ train <- training(heart_split)
 test <- testing(heart_split)
 ```
 
-
 ## Task 5: OLS and LASSO
 
-### Fitting Interaction Model
+Fitting Interaction Model
 ```{r}
 #Interaction Model
 ols_mlr <- lm(Age ~ MaxHR*HeartDisease_bin, data = train)
+
 #Summary
 summary(ols_mlr)
 
 #RMSE of test data
-
+ols_rmse <- ols_mlr |>
+  predict(test) |>
+  rmse_vec(truth = test$Age)
+ols_rmse
 ```
 
 LASSO
 ```{r}
 LASSO_recipe <- recipe(Age ~ MaxHR + HeartDisease_bin, data = new_heart) |>
-  step_normalize(all_predictors()) |>
+  step_dummy(HeartDisease_bin) |>
+  step_normalize(MaxHR) |>
   step_interact( ~ MaxHR:starts_with("HeartDisease_bin_"))
 LASSO_recipe
 ```
+
+Selecting best model
+```{r}
+#Create folds
+heart_folds <- vfold_cv(train, 10)
+
+#Define model
+LASSO_spec <- linear_reg(penalty = tune(), mixture = 1) |>
+  set_engine("glmnet")
+
+#Create Workflow
+LASSO_wkf <- workflow() |>
+  add_recipe(LASSO_recipe) |>
+  add_model(LASSO_spec)
+LASSO_wkf
+```
+
+Fit the model
+```{r}
+library(glmnet)
+LASSO_grid <- LASSO_wkf |>
+  tune_grid(resamples = heart_folds,
+            grid = grid_regular(penalty(), levels = 200))
+```
+
+Pick the best
+```{r}
+lowest_rmse <- LASSO_grid |>
+  select_best(metric = "rmse")
+
+LASSO_final <- LASSO_wkf |>
+  finalize_workflow(lowest_rmse) |>
+  fit(train)
+tidy(LASSO_final)
+```
+
+Without looking at the RMSE calculations, I would expect them to be about the same. This is because the penalty for the best LASSO model is very small for all the parameters, so the model isn't very different that the original model.
+
+Comparing RMSE
+```{r}
+#RMSE for our best LASSO model
+lasso_rmse <- LASSO_final |>
+  predict(test) |>
+  pull() |>
+  rmse_vec(truth = test$Age)
+
+#Compare to OLS
+lasso_rmse
+ols_rmse
+```
+The RMSEs are roughly the same even though the parameters are different because they are both predicting the new data well, despite not being the exact same model type.
+
+
+## Task 6: Logistic Regression
+
+
+
+
 
