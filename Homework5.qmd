@@ -6,11 +6,20 @@ editor: visual
 
 ## Task 1: Conceptual Questions
 
--   What is the purpose of using cross-validation when fitting a random forest model?
--   Describe the bagged tree algorithm.
--   What is meant by a general linear model?
--   When fitting a multiple linear regression model, what does adding an interaction term do? That is, what does it allow the model to do differently as compared to when it is not included in the model?
--   Why do we split our data into a training and test set?
+### What is the purpose of using cross-validation when fitting a random forest model?
+The purpose of using CV when fitting a random forest model is so that the parameters are tested on unseen data. CV allows us to find the ideal parameter that has been tested fully on data it hasn't seen. It allows for random forests to be a better model of the overall population since regular tree models can change drastically based on adding an extra observation, but with CV is is more robust.
+
+### Describe the bagged tree algorithm.
+The bagged tree algorithm is the simple version of random forests, and it involves using bootstrap sampling and doing the tree on each new random sample. This allows for a reduction in the variance of the model.
+
+### What is meant by a general linear model?
+A general linear model is a model that is linear in the parameters, and includes simple linear regression, multiple linear regression, and others. 
+
+### When fitting a multiple linear regression model, what does adding an interaction term do? That is, what does it allow the model to do differently as compared to when it is not included in the model?
+Adding an interaction term allows for the effect of one predictor to change depending on another predictor. It allows the model to capture interactions between parameters outside of just the main effects.
+
+### Why do we split our data into a training and test set?
+We split our data into training and testing set to evaluate how the model does on data that it hasn't seen yet. Since we are interested in how well our models predict, training the model on the training data and then testing it on the test data allows us to evaluate how well it predicts on unseen data.
 
 ## Task 2: Data Prep
 
@@ -21,6 +30,8 @@ library(tidyverse)
 library(caret)
 library(tidymodels)
 library(yardstick)
+library(rsample)
+library(glmnet)
 
 heart_data <- as_tibble(read_csv("heart.csv"))
 summary(heart_data)
@@ -55,7 +66,6 @@ Based on the visual evidence, it looks like an interaction model is more appropr
 Splitting data into training and testing
 ```{r}
 set.seed(101)
-library(rsample)
 
 heart_split <- initial_split(new_heart, prop = 0.8)
 train <- training(heart_split)
@@ -106,7 +116,6 @@ LASSO_wkf
 
 Fit the model
 ```{r}
-library(glmnet)
 LASSO_grid <- LASSO_wkf |>
   tune_grid(resamples = heart_folds,
             grid = grid_regular(penalty(), levels = 200))
@@ -141,6 +150,51 @@ The RMSEs are roughly the same even though the parameters are different because 
 
 
 ## Task 6: Logistic Regression
+
+```{r}
+#Making the first model just the original basic one with interaction
+LR1_model <- recipe(HeartDisease_bin ~ Age + MaxHR, data = new_heart) |>
+  step_normalize(all_numeric())
+LR2_model <- recipe(HeartDisease_bin ~ Age + RestingBP + Cholesterol + MaxHR, 
+                 data = new_heart) |>
+  step_normalize(all_numeric())
+
+LR_spec <- logistic_reg() |>
+  set_engine("glm")
+
+#Setting up workflows
+LR1_wkf <- workflow() |>
+  add_recipe(LR1_model) |>
+  add_model(LR_spec)
+LR2_wkf <- workflow() |>
+  add_recipe(LR2_model) |>
+  add_model(LR_spec)
+```
+
+Fit using CV folds and collect metrics
+```{r}
+LR1_fit <- LR1_wkf |>
+  fit_resamples(heart_folds, metrics = metric_set(accuracy, mn_log_loss))
+LR2_fit <- LR2_wkf |>
+  fit_resamples(heart_folds, metrics = metric_set(accuracy, mn_log_loss))
+
+rbind(LR1_fit |> collect_metrics(),
+      LR2_fit |> collect_metrics()) |>
+  mutate(Model = c("Model 1", "Model 1", "Model 2", "Model 2")) |>
+  select(Model, everything())
+```
+The second model, which has more predictors, is my model of choice because it has a higher accuracy and lower log loss than the other model. 
+
+Final fit
+```{r}
+LR_train_fit <- LR2_wkf |> fit(train)
+predictions <- predict(LR_train_fit, test) |> pull()
+confusionMatrix(data = predictions, reference = test$HeartDisease_bin)
+```
+The model does fairly well on the testing data, as we can see from the above confusion matrix. There are 21 false negatives and 24 false positives from the testing data. We also obtained sensitivity = 0.7447 and specificity = 0.7667 from the confusionMatrix() function above. The sensitivity value means that we were 74.47% accurate in predicting true positives (values that were predicted positive and were positive), and the specificity value means that we were 76.67% accurate in predicting true negatives (values that were predicted negative and were negative).
+
+
+
 
 
 
